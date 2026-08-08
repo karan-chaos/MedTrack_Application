@@ -16,6 +16,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -54,5 +55,19 @@ public class SupplierIntegrationTest {
                 .param("page", "0")
                 .param("size", "10"))
                 .andExpect(status().isNoContent()); // Returns 204 if empty, matching controller behavior
+    }
+
+    @Test
+    @WithMockUser(username = "supplierUser", roles = { "SUPPLIER" })
+    void testUpdateValidOrderStatus_ShouldReturnNotFoundIfEmptyBut400IfInvalidStatus() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/supplier/order/update/9999?newStatus=INVALID_STATUS"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "supplierUser", roles = { "SUPPLIER" })
+    void testUpdateStatus_OrderNotFound_ShouldReturn404() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/supplier/order/update/9999?newStatus=SHIPPED"))
+                .andExpect(status().isNotFound());
     }
 }
