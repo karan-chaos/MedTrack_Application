@@ -2,10 +2,13 @@ package com.medtrack.controller;
 
 import com.medtrack.model.Equipment;
 import com.medtrack.service.EquipmentService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -16,29 +19,84 @@ public class EquipmentController {
 
     private final EquipmentService equipmentService;
 
+    /**
+     * Retrieves all equipment records associated with the authenticated hospital.
+     *
+     * @param principal the authenticated user's security principal
+     * @return a list of equipment records
+     */
     @GetMapping
-    public ResponseEntity<List<Equipment>> getAllEquipment() {
-        return ResponseEntity.ok(equipmentService.getAllEquipment());
+    public ResponseEntity<List<Equipment>> getAllEquipment(Principal principal) {
+        return ResponseEntity.ok(equipmentService.getAllEquipment(principal.getName()));
     }
 
+    /**
+     * Retrieves a specific equipment record by its ID.
+     *
+     * @param id the equipment identifier
+     * @param principal the authenticated user's security principal
+     * @return the requested equipment record
+     */
     @GetMapping("/{id}")
-    public ResponseEntity<Equipment> getEquipmentById(@PathVariable Long id) {
-        return ResponseEntity.ok(equipmentService.getEquipmentById(id));
+    public ResponseEntity<Equipment> getEquipmentById(@PathVariable Long id, Principal principal) {
+        validateId(id);
+        return ResponseEntity.ok(equipmentService.getEquipmentById(id, principal.getName()));
     }
 
+    /**
+     * Creates a new equipment record.
+     *
+     * @param equipment the equipment details to create
+     * @param principal the authenticated user's security principal
+     * @return the created equipment record
+     */
     @PostMapping
-    public ResponseEntity<Equipment> addEquipment(@RequestBody Equipment equipment) {
-        return ResponseEntity.ok(equipmentService.addEquipment(equipment));
+    @PreAuthorize("hasRole('HOSPITAL')")
+    public ResponseEntity<Equipment> addEquipment(@Valid @RequestBody Equipment equipment, Principal principal) {
+        return ResponseEntity.ok(equipmentService.addEquipment(equipment, principal.getName()));
     }
 
+    /**
+     * Updates an existing equipment record.
+     *
+     * @param id the equipment identifier
+     * @param equipment the updated equipment details
+     * @param principal the authenticated user's security principal
+     * @return the updated equipment record
+     */
     @PutMapping("/{id}")
-    public ResponseEntity<Equipment> updateEquipment(@PathVariable Long id, @RequestBody Equipment equipment) {
-        return ResponseEntity.ok(equipmentService.updateEquipment(id, equipment));
+    @PreAuthorize("hasRole('HOSPITAL')")
+    public ResponseEntity<Equipment> updateEquipment(@PathVariable Long id,
+                                                     @Valid @RequestBody Equipment equipment,
+                                                     Principal principal) {
+        validateId(id);
+        return ResponseEntity.ok(equipmentService.updateEquipment(id, equipment, principal.getName()));
     }
 
+    /**
+     * Deletes an equipment record by its ID.
+     *
+     * @param id the equipment identifier
+     * @param principal the authenticated user's security principal
+     * @return HTTP 204 No Content when the deletion is successful
+     */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteEquipment(@PathVariable Long id) {
-        equipmentService.deleteEquipment(id);
+    @PreAuthorize("hasRole('HOSPITAL')")
+    public ResponseEntity<Void> deleteEquipment(@PathVariable Long id, Principal principal) {
+        validateId(id);
+        equipmentService.deleteEquipment(id, principal.getName());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Validates that a resource ID is a positive number.
+     *
+     * @param id the resource identifier
+     * @throws IllegalArgumentException if the ID is less than or equal to zero
+     */
+    private void validateId(Long id) {
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException("Invalid resource ID.");
+        }
     }
 }

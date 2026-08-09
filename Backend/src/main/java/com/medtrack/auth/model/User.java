@@ -9,6 +9,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * User represents the persistent entity stored in the database for application users.
  * It maps to the "users" table and stores authentication credentials, profile details,
@@ -27,7 +29,8 @@ import lombok.NoArgsConstructor;
  */
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "email")
+        @UniqueConstraint(columnNames = "email"),
+        @UniqueConstraint(columnNames = "username")
 })
 @Data
 @Builder
@@ -54,6 +57,13 @@ public class User {
     @NotBlank
     @Column(nullable = false)
     private String name;
+
+    /**
+     * User's unique username for identification.
+     */
+    @NotBlank
+    @Column(nullable = false, unique = true)
+    private String username;
 
     /**
      * User's email address, which acts as their unique identifier for login.
@@ -96,4 +106,32 @@ public class User {
     @Column(nullable = false)
     @Builder.Default
     private String role = "hospital";
+
+    /**
+     * Security and activity status of the user account.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private AccountStatus accountStatus = AccountStatus.ACTIVE;
+
+    @Builder.Default
+    private int failedLoginAttempts = 0;
+
+    private LocalDateTime accountLockedUntil;
+
+    @NotBlank
+    @Column(nullable = false)
+    private String phone;
+
+    @NotBlank
+    @Column(nullable = false)
+    private String organization;
+
+    @org.hibernate.annotations.CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @org.hibernate.annotations.UpdateTimestamp
+    private LocalDateTime updatedAt;
 }
