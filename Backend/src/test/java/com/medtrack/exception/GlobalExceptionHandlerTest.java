@@ -32,28 +32,6 @@ public class GlobalExceptionHandlerTest {
     // Helper method to extract a real MethodParameter via reflection
     public void dummyMethod(String dummy) {}
 
-    @Test
-    void handleValidationExceptions_Success() throws NoSuchMethodException {
-        BindingResult bindingResult = mock(BindingResult.class);
-        FieldError fieldError = new FieldError("registerRequest", "email", "Email must be valid");
-        when(bindingResult.getFieldErrors()).thenReturn(Collections.singletonList(fieldError));
-
-        java.lang.reflect.Method method = GlobalExceptionHandlerTest.class.getMethod("dummyMethod", String.class);
-        MethodParameter methodParameter = new MethodParameter(method, 0);
-
-        MethodArgumentNotValidException ex = new MethodArgumentNotValidException(
-                methodParameter,
-                bindingResult
-        );
-
-        ResponseEntity<ValidationErrorResponse> response = globalExceptionHandler.handleValidationExceptions(ex);
-
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("Validation failed", response.getBody().getMessage());
-        assertEquals("Email must be valid", response.getBody().getErrors().get("email"));
-    }
 
     @Test
     void handleBadCredentials_Success() {

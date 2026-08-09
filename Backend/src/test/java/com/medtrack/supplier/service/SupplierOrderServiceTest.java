@@ -254,7 +254,7 @@ public class SupplierOrderServiceTest {
 
                 // Use a CompletableFuture that throws ExecutionException to simulate send
                 // failure
-                java.util.concurrent.CompletableFuture<Object> failedFuture = new java.util.concurrent.CompletableFuture<>();
+                java.util.concurrent.CompletableFuture<org.springframework.kafka.support.SendResult<String, Object>> failedFuture = new java.util.concurrent.CompletableFuture<>();
                 failedFuture.completeExceptionally(new java.util.concurrent.ExecutionException("Kafka cluster down",
                                 new RuntimeException()));
 
