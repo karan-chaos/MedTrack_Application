@@ -8,6 +8,7 @@ import AppRoutes from "./routes/AppRoutes";
 import AboutPage from "./pages/AboutPage";
 import ContactPage from "./pages/ContactPage";
 import { ThemeProvider } from "./context/ThemeContext";
+import EnterpriseSecurityCenter from "./components/auth/EnterpriseSecurityCenter";
 
 const getRouteStateFromPath = () => {
   const pathname = window.location.pathname;
@@ -52,6 +53,7 @@ const getRouteStateFromPath = () => {
     orderstatus: "orderstatus",
     about: "about",
     contact: "contact",
+    "security-center": "security-center",
   };
 
   return {
@@ -119,6 +121,8 @@ function AppContent() {
             <AboutPage />
           ) : currentPage === "contact" ? (
             <ContactPage />
+          ) : currentPage === "security-center" ? (
+            <EnterpriseSecurityCenter />
           ) : (
             <AppRoutes
               currentPage={currentPage}
