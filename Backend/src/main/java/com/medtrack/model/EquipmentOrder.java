@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /**
  * EquipmentOrder Entity - Matches frontend RequestEquipmentPage.jsx, OrdersList.jsx, OrderStatus.jsx
@@ -61,4 +62,13 @@ public class EquipmentOrder {
     /** Supplier notes on the order */
     @Column(columnDefinition = "TEXT")
     private String supplierNotes;
+
+    /** Carrier or supplier reference shown to the hospital after dispatch. */
+    private String trackingNumber;
+
+    /** Supplier-provided arrival estimate for a dispatched order. */
+    private LocalDate estimatedDeliveryDate;
+
+    /** Set automatically when supplier fulfillment is confirmed as delivered. */
+    private LocalDateTime deliveredAt;
 }

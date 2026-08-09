@@ -127,6 +127,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasRole("SUPPLIER")
                 .requestMatchers(HttpMethod.DELETE, "/api/orders/**").hasRole("HOSPITAL")
 
+                // Supplier operations are isolated from hospital-side order creation.
+                .requestMatchers("/api/supplier/**").hasRole("SUPPLIER")
+
                 // Rule set for Maintenance schedules/tasks:
                 // - Read (GET): Any authenticated user can view maintenance tasks.
                 // - Creation/Removal (POST, DELETE): Restricted to users with the 'HOSPITAL' role.
