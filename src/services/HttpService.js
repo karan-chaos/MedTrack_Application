@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://localhost:8081",
+  baseURL: "http://localhost:8081",
   headers: {
     "Content-Type": "application/json"
   }
@@ -35,17 +35,8 @@ API.interceptors.request.use(
 API.interceptors.response.use(
   (response) => response,
   (error) => {
-    const status=error.response?.status;
-    if(status==401){
-      sessionStorage.removeItem("medtrack_user");
-      alert("Session expired. Please login again.");
-      window.location.href="/login";
-    }
-    else if(status==403){
-      alert("Access denied: You are not authorised to perform this action.");
-    }
-    else{
-      console.error("API request failed:", error.response?.data || error.message);
+    if (error.response && error.response.status === 403) {
+      alert("Access Denied: You do not have authorization to perform this action.");
     }
     return Promise.reject(error);
   }

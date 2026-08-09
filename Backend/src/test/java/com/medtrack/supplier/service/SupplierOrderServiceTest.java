@@ -240,4 +240,29 @@ public class SupplierOrderServiceTest {
                 assertThrows(ResourceNotFoundException.class,
                                 () -> supplierOrderService.updateOrderStatus(1L, "CONFIRMED"));
         }
+
+        @Test
+        void updateOrderStatus_KafkaProducerFailure_RetriesAndGracefullyExits() throws Exception {
+                EquipmentOrder order = EquipmentOrder.builder().id(1L).status("CONFIRMED").build();
+                when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+                ShipmentTracking tracking = ShipmentTracking.builder()
+                                .orderId(1L).shipmentStatus(ShipmentStatus.PENDING).build();
+                when(shipmentTrackingRepository.findByOrderId(1L)).thenReturn(Optional.of(tracking));
+                when(shipmentTrackingRepository.save(any(ShipmentTracking.class))).thenReturn(tracking);
+                when(orderRepository.save(any(EquipmentOrder.class))).thenReturn(order);
+
+                // Use a CompletableFuture that throws ExecutionException to simulate send
+                // failure
+                java.util.concurrent.CompletableFuture<Object> failedFuture = new java.util.concurrent.CompletableFuture<>();
+                failedFuture.completeExceptionally(new java.util.concurrent.ExecutionException("Kafka cluster down",
+                                new RuntimeException()));
+
+                when(kafkaTemplate.send(anyString(), anyString(), any())).thenReturn(failedFuture);
+
+                assertDoesNotThrow(() -> supplierOrderService.updateOrderStatus(1L, "SHIPPED"));
+
+                // We expect it to try exactly 3 times (the retry loop)
+                verify(kafkaTemplate, times(3)).send(anyString(), anyString(), any());
+        }
 }

@@ -35,12 +35,6 @@
 body {
   font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
 }
-body {
-  font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
-  background-color: var(--bg-surface);
-  color: var(--text-primary);
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
 
 /* Smooth spin for loading spinner */
 @keyframes spin {
@@ -88,5 +82,3 @@ body {
     animation: none;
   }
 }
-
-/* test frontend */

@@ -97,7 +97,7 @@ public class SupplierOrderConsumerTest {
                 .createdBy("admin@citymercy.org")
                 .build();
 
-        assertDoesNotThrow(() -> orderConsumer.consume(invalidEvent));
+        assertThrows(IllegalArgumentException.class, () -> orderConsumer.consume(invalidEvent));
         verify(orderRepository, never()).save(any());
     }
 
@@ -105,13 +105,22 @@ public class SupplierOrderConsumerTest {
     void consume_InvalidQuantity_ValidationFails() {
         validEvent.setQuantity(-1); // Invalid quantity
 
-        assertDoesNotThrow(() -> orderConsumer.consume(validEvent));
+        assertThrows(IllegalArgumentException.class, () -> orderConsumer.consume(validEvent));
         verify(orderRepository, never()).save(any());
     }
 
     @Test
     void consume_NullEvent_HandlesGracefully() {
-        assertDoesNotThrow(() -> orderConsumer.consume(null));
+        assertThrows(IllegalArgumentException.class, () -> orderConsumer.consume(null));
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void consume_DBFailure_RethrowsExceptionForRetryableTopic() {
+        when(orderRepository.findByOrderCode("ORD-1001")).thenReturn(Optional.empty());
+        when(orderRepository.save(any(EquipmentOrder.class))).thenThrow(new RuntimeException("Database timeout"));
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> orderConsumer.consume(validEvent));
+        assertEquals("Database timeout", exception.getMessage());
     }
 }

@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,13 @@ public class SupplierOrderConsumer {
     private static final Logger log = LoggerFactory.getLogger(SupplierOrderConsumer.class);
     private final EquipmentOrderRepository orderRepository;
 
+    @RetryableTopic(
+            attempts = "3",
+            backoff = @Backoff(delay = 1000, multiplier = 2.0),
+            autoCreateTopics = "false",
+            dltTopicSuffix = "-dlt",
+            exclude = {IllegalArgumentException.class}
+    )
     @KafkaListener(topics = "${app.kafka.topics.order-events:order-events}", groupId = "${spring.kafka.consumer.group-id:supplier-order-sync}")
     @Transactional
     public void consume(OrderPlacedEvent event) {
@@ -53,10 +62,11 @@ public class SupplierOrderConsumer {
             orderRepository.save(order);
             log.info("Successfully synchronized supplier-side order data for order code: [{}]", event.getOrderCode());
         } catch (IllegalArgumentException e) {
-            log.error("Validation failed for OrderPlacedEvent: {}", e.getMessage());
+            log.error("Validation failed for OrderPlacedEvent, skipping retries and routing to DLQ: {}", e.getMessage());
+            throw e; // Rethrow to route to DLQ immediately (as per exclude = IllegalArgumentException.class)
         } catch (Exception e) {
             log.error("Failed to process OrderPlacedEvent due to error: {}", e.getMessage(), e);
-            throw e; // Rethrow to allow Kafka to retry or dead-letter
+            throw e; // Rethrow for transient retry mechanism
         }
     }
 

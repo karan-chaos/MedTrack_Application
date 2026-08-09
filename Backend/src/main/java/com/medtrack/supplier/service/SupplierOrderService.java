@@ -253,33 +253,56 @@ public class SupplierOrderService {
             log.warn("KafkaTemplate is not available. Skipping event publication for order ID: [{}]", orderId);
             return;
         }
-        try {
-            if (status == ShipmentStatus.SHIPPED) {
-                com.medtrack.supplier.event.OrderShippedEvent event = com.medtrack.supplier.event.OrderShippedEvent
-                        .builder()
-                        .orderId(orderId)
-                        .shipmentTrackingNumber(shipment.getShipmentTrackingNumber())
-                        .estimatedDeliveryDate(shipment.getEstimatedDeliveryDate())
-                        .shippedAt(LocalDateTime.now())
-                        .supplierId(shipment.getSupplierId())
-                        .build();
-                log.info("Publishing OrderShippedEvent for order ID: [{}]", orderId);
-                kafkaTemplate.send(orderEventsTopic, String.valueOf(orderId), event);
-            } else if (status == ShipmentStatus.DELIVERED) {
-                com.medtrack.supplier.event.OrderDeliveredEvent event = com.medtrack.supplier.event.OrderDeliveredEvent
-                        .builder()
-                        .orderId(orderId)
-                        .shipmentTrackingNumber(shipment.getShipmentTrackingNumber())
-                        .actualDeliveryDate(shipment.getActualDeliveryDate() != null ? shipment.getActualDeliveryDate()
-                                : LocalDateTime.now())
-                        .supplierId(shipment.getSupplierId())
-                        .build();
-                log.info("Publishing OrderDeliveredEvent for order ID: [{}]", orderId);
-                kafkaTemplate.send(orderEventsTopic, String.valueOf(orderId), event);
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                if (status == ShipmentStatus.SHIPPED) {
+                    com.medtrack.supplier.event.OrderShippedEvent event = com.medtrack.supplier.event.OrderShippedEvent
+                            .builder()
+                            .orderId(orderId)
+                            .shipmentTrackingNumber(shipment.getShipmentTrackingNumber())
+                            .estimatedDeliveryDate(shipment.getEstimatedDeliveryDate())
+                            .shippedAt(LocalDateTime.now())
+                            .supplierId(shipment.getSupplierId())
+                            .build();
+                    log.info("Publishing OrderShippedEvent for order ID: [{}] (Attempt {})", orderId, attempt);
+                    kafkaTemplate.send(orderEventsTopic, String.valueOf(orderId), event).get(); // use get() for
+                                                                                                // synchronous exception
+                                                                                                // throwing
+                } else if (status == ShipmentStatus.DELIVERED) {
+                    com.medtrack.supplier.event.OrderDeliveredEvent event = com.medtrack.supplier.event.OrderDeliveredEvent
+                            .builder()
+                            .orderId(orderId)
+                            .shipmentTrackingNumber(shipment.getShipmentTrackingNumber())
+                            .actualDeliveryDate(
+                                    shipment.getActualDeliveryDate() != null ? shipment.getActualDeliveryDate()
+                                            : LocalDateTime.now())
+                            .supplierId(shipment.getSupplierId())
+                            .build();
+                    log.info("Publishing OrderDeliveredEvent for order ID: [{}] (Attempt {})", orderId, attempt);
+                    kafkaTemplate.send(orderEventsTopic, String.valueOf(orderId), event).get(); // convert to sync to
+                                                                                                // accurately detect if
+                                                                                                // it failed and retry
+                }
+                break; // Break the loop on success
+            } catch (Exception e) {
+                log.error(
+                        "Failed to publish Kafka event for order ID: [{}], status: [{}] on attempt {} due to error: {}",
+                        orderId, status, attempt, e.getMessage());
+                if (attempt == maxRetries) {
+                    log.error(
+                            "All {} attempts to publish Kafka event for order ID: [{}] failed permanently. Stacktrace: ",
+                            maxRetries, orderId, e);
+                } else {
+                    try {
+                        Thread.sleep(1000); // 1-second delay between retries
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.error("Retry interruption", ie);
+                        break;
+                    }
+                }
             }
-        } catch (Exception e) {
-            log.error("Failed to publish Kafka event for order ID: [{}], status: [{}] due to error: {}",
-                    orderId, status, e.getMessage(), e);
         }
     }
 }

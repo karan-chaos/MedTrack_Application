@@ -1,45 +1,29 @@
 import API from "./HttpService";
 
+// Fetch all maintenance tasks, optionally filtered by technician
 export const getAllTasks = async (technicianId) => {
   const url = technicianId
     ? `/api/maintenance?technicianId=${technicianId}`
     : "/api/maintenance";
 
-  try {
-    const response = await API.get(url);
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch maintenance tasks:", error);
-    throw error;
-  }
+  const response = await API.get(url);
+  return response.data;
 };
+
+// Fetch a single maintenance task by ID
 export const getTaskById = async (id) => {
-  try {
-    const response = await API.get(`/api/maintenance/${id}`);
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch maintenance task:", error);
-    throw error;
-  }
+  const response = await API.get(`/api/maintenance/${id}`);
+  return response.data;
 };
 
+// Schedule a new maintenance task
 export const scheduleTask = async (data) => {
-  try {
-    const response = await API.post("/api/maintenance", data);
-    return response.data;
-  } catch (error) {
-    console.error("Failed to schedule maintenance task:", error);
-    throw error;
-  }
+  const response = await API.post("/api/maintenance", data);
+  return response.data;
 };
 
-
+// Update an existing maintenance task
 export const updateTask = async (id, data) => {
-  try {
-    const response = await API.put(`/api/maintenance/${id}`, data);
-    return response.data;
-  } catch (error) {
-    console.error("Failed to update maintenance task:", error);
-    throw error;
-  }
+  const response = await API.put(`/api/maintenance/${id}`, data);
+  return response.data;
 };
