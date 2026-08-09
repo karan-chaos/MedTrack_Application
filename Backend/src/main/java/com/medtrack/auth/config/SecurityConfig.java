@@ -127,6 +127,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasRole("SUPPLIER")
                 .requestMatchers(HttpMethod.DELETE, "/api/orders/**").hasRole("HOSPITAL")
 
+                // Supplier fulfillment workflow: suppliers can view demand and only advance
+                // orders through the dedicated, validated supplier endpoint.
+                .requestMatchers(HttpMethod.GET, "/api/supplier/orders/**").hasRole("SUPPLIER")
+                .requestMatchers(HttpMethod.PATCH, "/api/supplier/orders/**").hasRole("SUPPLIER")
+
                 // Rule set for Maintenance schedules/tasks:
                 // - Read (GET): Any authenticated user can view maintenance tasks.
                 // - Creation/Removal (POST, DELETE): Restricted to users with the 'HOSPITAL' role.
