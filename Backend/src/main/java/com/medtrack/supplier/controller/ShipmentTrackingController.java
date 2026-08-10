@@ -1,14 +1,17 @@
 package com.medtrack.supplier.controller;
 
 import com.medtrack.supplier.dto.CreateShipmentRequest;
+import com.medtrack.supplier.dto.ShipmentTrackingDetailResponse;
 import com.medtrack.supplier.dto.ShipmentTrackingResponse;
 import com.medtrack.supplier.dto.UpdateShipmentStatusRequest;
 import com.medtrack.supplier.service.ShipmentTrackingService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('SUPPLIER')")
 @Tag(name = "Shipment Tracking", description = "Endpoints for managing and querying shipment tracking records for supplier orders.")
+@SecurityRequirement(name = "bearerAuth")
 public class ShipmentTrackingController {
 
     private final ShipmentTrackingService shipmentTrackingService;
@@ -32,7 +36,10 @@ public class ShipmentTrackingController {
     @Operation(summary = "Create shipment tracking", description = "Creates a new shipment tracking record for an existing confirmed order.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Shipment created successfully", content = @Content(schema = @Schema(implementation = ShipmentTrackingResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid request or duplicate tracking data")
+            @ApiResponse(responseCode = "400", description = "Invalid request, invalid tracking number format, or duplicate tracking data"),
+            @ApiResponse(responseCode = "404", description = "Order not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role (SUPPLIER required)")
     })
     public ResponseEntity<ShipmentTrackingResponse> createShipment(@Valid @RequestBody CreateShipmentRequest request) {
         ShipmentTrackingResponse response = shipmentTrackingService.createShipment(request);
@@ -43,8 +50,10 @@ public class ShipmentTrackingController {
     @Operation(summary = "Update shipment status", description = "Updates the shipping status of an existing shipment record and propagates state to the parent order.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Shipment status updated", content = @Content(schema = @Schema(implementation = ShipmentTrackingResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid status transition"),
-            @ApiResponse(responseCode = "404", description = "Shipment record not found")
+            @ApiResponse(responseCode = "400", description = "Invalid status transition, missing tracking number, or invalid status value"),
+            @ApiResponse(responseCode = "404", description = "Shipment record not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role (SUPPLIER required)")
     })
     public ResponseEntity<ShipmentTrackingResponse> updateShipmentStatus(
             @PathVariable Long id,
@@ -57,7 +66,9 @@ public class ShipmentTrackingController {
     @Operation(summary = "Get shipment by ID", description = "Retrieves a specific shipment tracking record by its internal unique identifier.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Shipment retrieved successfully", content = @Content(schema = @Schema(implementation = ShipmentTrackingResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Shipment record not found")
+            @ApiResponse(responseCode = "404", description = "Shipment record not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role (SUPPLIER required)")
     })
     public ResponseEntity<ShipmentTrackingResponse> getShipmentById(@PathVariable Long id) {
         ShipmentTrackingResponse response = shipmentTrackingService.getShipmentById(id);
@@ -68,7 +79,9 @@ public class ShipmentTrackingController {
     @Operation(summary = "Get shipment by tracking number", description = "Retrieves a shipment based on its tracking number.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Shipment retrieved successfully", content = @Content(schema = @Schema(implementation = ShipmentTrackingResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Shipment record not found")
+            @ApiResponse(responseCode = "404", description = "Shipment record not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role (SUPPLIER required)")
     })
     public ResponseEntity<ShipmentTrackingResponse> getShipmentByTrackingNumber(@PathVariable String trackingNumber) {
         ShipmentTrackingResponse response = shipmentTrackingService.getShipmentByTrackingNumber(trackingNumber);
@@ -79,7 +92,9 @@ public class ShipmentTrackingController {
     @Operation(summary = "Get shipment by order ID", description = "Retrieves the shipping record associated with a specific order.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Shipment retrieved successfully", content = @Content(schema = @Schema(implementation = ShipmentTrackingResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Shipment record not found")
+            @ApiResponse(responseCode = "404", description = "Shipment record not found"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role (SUPPLIER required)")
     })
     public ResponseEntity<ShipmentTrackingResponse> getShipmentByOrderId(@PathVariable Long orderId) {
         ShipmentTrackingResponse response = shipmentTrackingService.getShipmentByOrderId(orderId);
@@ -89,10 +104,39 @@ public class ShipmentTrackingController {
     @GetMapping("/supplier/{supplierId}")
     @Operation(summary = "Get all shipments for a supplier", description = "Retrieves a list of all shipments handled by a specific supplier.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Shipments retrieved successfully")
+            @ApiResponse(responseCode = "200", description = "Shipments retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role (SUPPLIER required)")
     })
     public ResponseEntity<List<ShipmentTrackingResponse>> getShipmentsBySupplier(@PathVariable Long supplierId) {
         List<ShipmentTrackingResponse> response = shipmentTrackingService.getShipmentsBySupplier(supplierId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Phase 22 – Shipment Tracking Detail (minor new capability).
+     *
+     * <p>
+     * Returns an enriched tracking view for a specific order that includes order
+     * status, shipment status, tracking number, ETA, actual delivery date, delay
+     * status, and the full timeline. Useful for supplier-facing operational
+     * dashboards.
+     * </p>
+     */
+    @GetMapping("/order/{orderId}/detail")
+    @Operation(summary = "Get full shipment tracking detail for an order", description = "Returns an enriched supplier-facing view that combines order status, "
+            + "shipment status, tracking number, ETA, actual delivery date, delay flag, "
+            + "and the complete shipment status timeline for the given order.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Shipment tracking detail retrieved successfully", content = @Content(schema = @Schema(implementation = ShipmentTrackingDetailResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Order or shipment tracking not found"),
+            @ApiResponse(responseCode = "400", description = "Invalid order ID"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated – valid JWT required"),
+            @ApiResponse(responseCode = "403", description = "Insufficient role – SUPPLIER role required")
+    })
+    public ResponseEntity<ShipmentTrackingDetailResponse> getShipmentTrackingDetail(
+            @Parameter(description = "Equipment order ID", required = true, example = "42") @PathVariable Long orderId) {
+        ShipmentTrackingDetailResponse response = shipmentTrackingService.getShipmentTrackingDetail(orderId);
         return ResponseEntity.ok(response);
     }
 }

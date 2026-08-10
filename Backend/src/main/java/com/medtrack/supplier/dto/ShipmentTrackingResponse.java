@@ -21,5 +21,6 @@ public class ShipmentTrackingResponse {
     private Long supplierId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private boolean delayDetected;
     private List<ShipmentTimelineResponse> timeline;
 }

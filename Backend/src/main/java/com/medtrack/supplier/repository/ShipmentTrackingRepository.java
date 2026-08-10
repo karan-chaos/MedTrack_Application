@@ -32,4 +32,9 @@ public interface ShipmentTrackingRepository extends JpaRepository<ShipmentTracki
     long countBySupplierId(Long supplierId);
 
     long countBySupplierIdAndDelayDetectedTrue(Long supplierId);
+
+    // Phase 22: Delay detection – find delivered shipments not yet flagged as
+    // delayed
+    // (used to catch late-but-delivered shipments)
+    List<ShipmentTracking> findByShipmentStatusAndDelayDetectedFalse(ShipmentStatus status);
 }

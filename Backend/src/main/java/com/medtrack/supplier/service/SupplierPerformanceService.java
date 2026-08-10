@@ -38,60 +38,66 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SupplierPerformanceService {
 
-    private static final Logger log = LoggerFactory.getLogger(SupplierPerformanceService.class);
+        private static final Logger log = LoggerFactory.getLogger(SupplierPerformanceService.class);
 
-    private final ShipmentTrackingRepository shipmentTrackingRepository;
+        private final ShipmentTrackingRepository shipmentTrackingRepository;
 
-    @Value("${app.supplier.scoring.ontime-weight:0.8}")
-    private double onTimeWeight;
+        @Value("${app.supplier.scoring.ontime-weight:0.8}")
+        private double onTimeWeight;
 
-    @Value("${app.supplier.scoring.delay-penalty-weight:20.0}")
-    private double delayPenaltyWeight;
+        @Value("${app.supplier.scoring.delay-penalty-weight:20.0}")
+        private double delayPenaltyWeight;
 
-    /**
-     * Returns a full performance report for the given supplier.
-     *
-     * @param supplierId the supplier ID to score
-     * @return {@link SupplierPerformanceResponse} with calculated metrics
-     */
-    @Transactional(readOnly = true)
-    public SupplierPerformanceResponse getPerformance(Long supplierId) {
-        long totalShipments = shipmentTrackingRepository.countBySupplierId(supplierId);
-        long delayedShipments = shipmentTrackingRepository.countBySupplierIdAndDelayDetectedTrue(supplierId);
+        /**
+         * Returns a full performance report for the given supplier.
+         *
+         * @param supplierId the supplier ID to score
+         * @return {@link SupplierPerformanceResponse} with calculated metrics
+         */
+        @Transactional(readOnly = true)
+        public SupplierPerformanceResponse getPerformance(Long supplierId) {
+                long totalShipments = shipmentTrackingRepository.countBySupplierId(supplierId);
+                long delayedShipments = shipmentTrackingRepository.countBySupplierIdAndDelayDetectedTrue(supplierId);
 
-        List<ShipmentTracking> delivered = shipmentTrackingRepository
-                .findBySupplierIdAndShipmentStatus(supplierId, ShipmentStatus.DELIVERED);
-        long deliveredShipments = delivered.size();
+                List<ShipmentTracking> delivered = shipmentTrackingRepository
+                                .findBySupplierIdAndShipmentStatus(supplierId, ShipmentStatus.DELIVERED);
+                long deliveredShipments = delivered.size();
 
-        // On-time deliveries: delivered but not flagged as delayed
-        long onTimeShipments = delivered.stream()
-                .filter(s -> !s.isDelayDetected())
-                .count();
+                // On-time deliveries: delivered and not flagged as delayed.
+                // Phase 22: additionally guard via actual vs estimated date comparison so
+                // scoring
+                // is accurate even when the delay scheduler has not yet processed the shipment.
+                long onTimeShipments = delivered.stream()
+                                .filter(s -> !s.isDelayDetected())
+                                .filter(s -> s.getActualDeliveryDate() == null
+                                                || s.getEstimatedDeliveryDate() == null
+                                                || !s.getActualDeliveryDate().isAfter(s.getEstimatedDeliveryDate()))
+                                .count();
 
-        double onTimeDeliveryRate = deliveredShipments > 0
-                ? (double) onTimeShipments / deliveredShipments * 100.0
-                : 0.0;
+                double onTimeDeliveryRate = deliveredShipments > 0
+                                ? (double) onTimeShipments / deliveredShipments * 100.0
+                                : 0.0;
 
-        double delayRatio = totalShipments > 0
-                ? (double) delayedShipments / totalShipments
-                : 0.0;
+                double delayRatio = totalShipments > 0
+                                ? (double) delayedShipments / totalShipments
+                                : 0.0;
 
-        double performanceScore = (onTimeDeliveryRate * onTimeWeight)
-                + ((1.0 - delayRatio) * delayPenaltyWeight);
+                double performanceScore = (onTimeDeliveryRate * onTimeWeight)
+                                + ((1.0 - delayRatio) * delayPenaltyWeight);
 
-        log.debug(
-                "Performance score for supplier {}: total={}, delivered={}, delayed={}, onTime={}, rate={:.2f}, score={:.2f}",
-                supplierId, totalShipments, deliveredShipments, delayedShipments,
-                onTimeShipments, onTimeDeliveryRate, performanceScore);
+                log.debug(
+                                "Performance score for supplier {}: total={}, delivered={}, delayed={}, onTime={}, rate={:.2f}, score={:.2f}",
+                                supplierId, totalShipments, deliveredShipments, delayedShipments,
+                                onTimeShipments, onTimeDeliveryRate, performanceScore);
 
-        return SupplierPerformanceResponse.builder()
-                .supplierId(supplierId)
-                .totalShipments(totalShipments)
-                .deliveredShipments(deliveredShipments)
-                .delayedShipments(delayedShipments)
-                .onTimeShipments(onTimeShipments)
-                .onTimeDeliveryRate(onTimeDeliveryRate)
-                .performanceScore(performanceScore)
-                .build();
-    }
+                return SupplierPerformanceResponse.builder()
+                                .supplierId(supplierId)
+                                .totalShipments(totalShipments)
+                                .deliveredShipments(deliveredShipments)
+                                .delayedShipments(delayedShipments)
+                                .onTimeShipments(onTimeShipments)
+                                .onTimeDeliveryRate(onTimeDeliveryRate)
+                                .performanceScore(performanceScore)
+                                .build();
+        }
 }

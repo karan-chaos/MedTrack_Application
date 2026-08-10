@@ -18,14 +18,23 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Phase 7 – Delivery Delay Detection Service.
+ * Phase 22 – Delivery Delay Detection Service (strengthened).
  *
  * <p>
- * Polls the shipment repository on a fixed schedule and flags any shipment
- * whose estimated delivery date has passed and is not yet delivered.
- * A {@link ShipmentDelayedEvent} is published to Kafka exactly once per
- * shipment
- * (idempotency is guaranteed by the {@code delayDetected} flag on the entity).
+ * Polls the shipment repository on a fixed schedule and:
+ * <ol>
+ * <li>Flags non-delivered shipments whose ETA has <em>passed</em> as delayed
+ * and publishes
+ * {@link ShipmentDelayedEvent} exactly once (idempotency via
+ * {@code delayDetected} flag).</li>
+ * <li>Flags <em>delivered</em> shipments where
+ * {@code actualDeliveryDate > estimatedDeliveryDate}
+ * as delayed (late-but-delivered path), so performance scoring counts them
+ * correctly.</li>
+ * <li>Logs an approaching-ETA warning (no Kafka event) for non-delivered
+ * shipments
+ * within {@code app.delay.approaching-eta.warning-hours} of their ETA.</li>
+ * </ol>
  * </p>
  */
 @Service
@@ -42,29 +51,56 @@ public class DeliveryDelayDetectionService {
     @Value("${app.kafka.topics.delay-events:delay-events}")
     private String delayEventsTopic;
 
+    @Value("${app.delay.approaching-eta.warning-hours:24}")
+    private long approachingEtaWarningHours;
+
     /**
      * Runs every {@code app.delay.check.interval-ms} milliseconds (default 60 s).
-     * Finds all non-delivered shipments not yet flagged as delayed and checks
-     * whether
-     * their estimated delivery date is in the past.
+     *
+     * <p>
+     * Three detection passes per cycle:
+     * </p>
+     * <ol>
+     * <li>Past-ETA for non-delivered shipments → flag + Kafka event</li>
+     * <li>Late-but-delivered shipments → flag + Kafka event</li>
+     * <li>Approaching-ETA for non-delivered shipments → log warning only</li>
+     * </ol>
      */
     @Scheduled(fixedDelayString = "${app.delay.check.interval-ms:60000}")
     public void detectDelays() {
         log.debug("Running delivery delay detection scan...");
 
-        List<ShipmentTracking> candidates = shipmentTrackingRepository
-                .findByShipmentStatusNotAndDelayDetectedFalse(ShipmentStatus.DELIVERED);
-
         LocalDateTime now = LocalDateTime.now();
         int flaggedCount = 0;
 
-        for (ShipmentTracking shipment : candidates) {
+        // --- Pass 1: past-ETA, not yet delivered, not yet flagged ---
+        List<ShipmentTracking> pastEtaCandidates = shipmentTrackingRepository
+                .findByShipmentStatusNotAndDelayDetectedFalse(ShipmentStatus.DELIVERED);
+
+        for (ShipmentTracking shipment : pastEtaCandidates) {
             if (shipment.getEstimatedDeliveryDate() != null
                     && shipment.getEstimatedDeliveryDate().isBefore(now)) {
                 flagSingleDelay(shipment, now);
                 flaggedCount++;
             }
         }
+
+        // --- Pass 2: late-but-delivered (actualDeliveryDate > estimatedDeliveryDate),
+        // not yet flagged ---
+        List<ShipmentTracking> deliveredNotFlagged = shipmentTrackingRepository
+                .findByShipmentStatusAndDelayDetectedFalse(ShipmentStatus.DELIVERED);
+
+        for (ShipmentTracking shipment : deliveredNotFlagged) {
+            if (shipment.getActualDeliveryDate() != null
+                    && shipment.getEstimatedDeliveryDate() != null
+                    && shipment.getActualDeliveryDate().isAfter(shipment.getEstimatedDeliveryDate())) {
+                flagSingleDelay(shipment, shipment.getActualDeliveryDate());
+                flaggedCount++;
+            }
+        }
+
+        // --- Pass 3: approaching ETA – log-only warning, no Kafka event ---
+        detectApproachingEta(now);
 
         if (flaggedCount > 0) {
             log.info("Delay detection scan complete. Flagged {} delayed shipment(s).", flaggedCount);
@@ -78,12 +114,12 @@ public class DeliveryDelayDetectionService {
      * Kafka event.
      * Wrapped in its own transaction so a failure on one shipment does not roll
      * back others.
+     * The {@code delayDetected} in-memory check guards against concurrent calls.
      */
     @Transactional
     public void flagSingleDelay(ShipmentTracking shipment, LocalDateTime detectedAt) {
-        // Guard: double-check the flag (handles concurrent calls)
         if (shipment.isDelayDetected()) {
-            return;
+            return; // already flagged – idempotency guard
         }
 
         shipment.setDelayDetected(true);
@@ -95,6 +131,35 @@ public class DeliveryDelayDetectionService {
                 saved.getEstimatedDeliveryDate(), detectedAt);
 
         publishDelayEvent(saved, detectedAt);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Emits a log warning for shipments approaching (within warning window) their
+     * ETA
+     * but not yet delivered and not yet flagged as delayed.
+     * No Kafka event is published for this condition.
+     */
+    private void detectApproachingEta(LocalDateTime now) {
+        LocalDateTime warningThreshold = now.plusHours(approachingEtaWarningHours);
+
+        List<ShipmentTracking> approaching = shipmentTrackingRepository
+                .findByShipmentStatusNotAndDelayDetectedFalse(ShipmentStatus.DELIVERED);
+
+        for (ShipmentTracking shipment : approaching) {
+            LocalDateTime eta = shipment.getEstimatedDeliveryDate();
+            if (eta != null && !eta.isBefore(now) && eta.isBefore(warningThreshold)) {
+                log.warn(
+                        "Shipment [id={}, tracking={}] is approaching ETA within {} hours. ETA: {}",
+                        shipment.getId(),
+                        shipment.getShipmentTrackingNumber(),
+                        approachingEtaWarningHours,
+                        eta);
+            }
+        }
     }
 
     private void publishDelayEvent(ShipmentTracking shipment, LocalDateTime detectedAt) {
