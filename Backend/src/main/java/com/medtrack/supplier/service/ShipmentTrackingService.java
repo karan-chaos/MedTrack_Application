@@ -7,6 +7,8 @@ import com.medtrack.model.EquipmentOrder;
 import com.medtrack.repository.EquipmentOrderRepository;
 import com.medtrack.supplier.dto.CreateShipmentRequest;
 import com.medtrack.supplier.dto.ShipmentTrackingResponse;
+import com.medtrack.supplier.dto.ShipmentTimelineResponse;
+import com.medtrack.supplier.dto.ShipmentTrackingResponse;
 import com.medtrack.supplier.dto.UpdateShipmentStatusRequest;
 import com.medtrack.supplier.model.ShipmentStatus;
 import com.medtrack.supplier.model.ShipmentTracking;
@@ -16,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -34,15 +38,18 @@ public class ShipmentTrackingService {
 
         // 2. Prevent duplicate shipment creation for same order
         shipmentTrackingRepository.findByOrderId(request.getOrderId()).ifPresent(s -> {
-            throw new IllegalArgumentException("Shipment tracking already exists for Order ID: " + request.getOrderId());
+            throw new IllegalArgumentException(
+                    "Shipment tracking already exists for Order ID: " + request.getOrderId());
         });
 
         // 3. Ensure tracking number uniqueness
         shipmentTrackingRepository.findByShipmentTrackingNumber(request.getShipmentTrackingNumber()).ifPresent(s -> {
-            throw new DuplicateTrackingNumberException("Tracking number already in use: " + request.getShipmentTrackingNumber());
+            throw new DuplicateTrackingNumberException(
+                    "Tracking number already in use: " + request.getShipmentTrackingNumber());
         });
 
-        if (request.getEstimatedDeliveryDate() != null && request.getEstimatedDeliveryDate().isBefore(LocalDateTime.now())) {
+        if (request.getEstimatedDeliveryDate() != null
+                && request.getEstimatedDeliveryDate().isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException("Estimated delivery date cannot be in the past");
         }
 
@@ -55,6 +62,7 @@ public class ShipmentTrackingService {
                 .supplierId(request.getSupplierId())
                 .createdAt(LocalDateTime.now())
                 .build();
+        shipment.addTimelineEvent(null, ShipmentStatus.PENDING, "Shipment tracking created");
 
         ShipmentTracking savedShipment = shipmentTrackingRepository.save(shipment);
 
@@ -85,6 +93,9 @@ public class ShipmentTrackingService {
 
         ShipmentStatus currentStatus = shipment.getShipmentStatus();
         if (newStatus == currentStatus) {
+            if (newStatus == ShipmentStatus.DELIVERED) {
+                return mapToResponse(shipment); // Harmless duplicate DELIVERED event
+            }
             throw new InvalidStatusTransitionException("Shipment is already in " + currentStatus + " status");
         }
         if (newStatus.ordinal() < currentStatus.ordinal()) {
@@ -97,6 +108,9 @@ public class ShipmentTrackingService {
         if (newStatus == ShipmentStatus.DELIVERED) {
             shipment.setActualDeliveryDate(LocalDateTime.now());
         }
+        String trackingInfo = request.getSupplierNotes() != null ? request.getSupplierNotes()
+                : "Status updated to " + newStatus;
+        shipment.addTimelineEvent(currentStatus, newStatus, trackingInfo);
         shipment.setUpdatedAt(LocalDateTime.now());
         ShipmentTracking updatedShipment = shipmentTrackingRepository.save(shipment);
 
@@ -136,14 +150,16 @@ public class ShipmentTrackingService {
     @Transactional(readOnly = true)
     public ShipmentTrackingResponse getShipmentByTrackingNumber(String trackingNumber) {
         ShipmentTracking shipment = shipmentTrackingRepository.findByShipmentTrackingNumber(trackingNumber)
-                .orElseThrow(() -> new ResourceNotFoundException("Shipment tracking not found for tracking number: " + trackingNumber));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Shipment tracking not found for tracking number: " + trackingNumber));
         return mapToResponse(shipment);
     }
 
     @Transactional(readOnly = true)
     public ShipmentTrackingResponse getShipmentByOrderId(Long orderId) {
         ShipmentTracking shipment = shipmentTrackingRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Shipment tracking not found for Order ID: " + orderId));
+                .orElseThrow(
+                        () -> new ResourceNotFoundException("Shipment tracking not found for Order ID: " + orderId));
         return mapToResponse(shipment);
     }
 
@@ -155,6 +171,14 @@ public class ShipmentTrackingService {
     }
 
     private ShipmentTrackingResponse mapToResponse(ShipmentTracking shipment) {
+        List<ShipmentTimelineResponse> timelineResponses = shipment.getTimeline() != null
+                ? shipment.getTimeline().stream().map(t -> ShipmentTimelineResponse.builder()
+                        .eventTimestamp(t.getEventTimestamp())
+                        .previousStatus(t.getPreviousStatus() != null ? t.getPreviousStatus().name() : null)
+                        .newStatus(t.getNewStatus().name())
+                        .trackingInformation(t.getTrackingInformation()).build()).collect(Collectors.toList())
+                : Collections.emptyList();
+
         return ShipmentTrackingResponse.builder()
                 .id(shipment.getId())
                 .orderId(shipment.getOrderId())
@@ -165,6 +189,7 @@ public class ShipmentTrackingService {
                 .supplierId(shipment.getSupplierId())
                 .createdAt(shipment.getCreatedAt())
                 .updatedAt(shipment.getUpdatedAt())
+                .timeline(timelineResponses)
                 .build();
     }
 }

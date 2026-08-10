@@ -250,6 +250,26 @@ public class ShipmentTrackingServiceTest {
     }
 
     @Test
+    void updateShipmentStatus_SameStatus_Delivered_Harmless() {
+        UpdateShipmentStatusRequest request = UpdateShipmentStatusRequest.builder()
+                .shipmentStatus("DELIVERED") // Same state, should bypass exception
+                .build();
+
+        ShipmentTracking shipment = ShipmentTracking.builder()
+                .id(5L)
+                .shipmentStatus(ShipmentStatus.DELIVERED)
+                .build();
+
+        when(shipmentTrackingRepository.findById(5L)).thenReturn(Optional.of(shipment));
+
+        ShipmentTrackingResponse response = shipmentTrackingService.updateShipmentStatus(5L, request);
+
+        assertNotNull(response);
+        assertEquals("DELIVERED", response.getShipmentStatus());
+        verify(shipmentTrackingRepository, never()).save(any());
+    }
+
+    @Test
     void getShipmentById_Success() {
         ShipmentTracking shipment = ShipmentTracking.builder()
                 .id(5L)

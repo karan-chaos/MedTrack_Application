@@ -228,6 +228,18 @@ public class SupplierOrderServiceTest {
         }
 
         @Test
+        void updateOrderStatus_SameStateTransition_Delivered_Harmless() {
+                EquipmentOrder order = EquipmentOrder.builder().id(1L).status("DELIVERED").build();
+                when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+                EquipmentOrder result = supplierOrderService.updateOrderStatus(1L, "DELIVERED");
+
+                assertNotNull(result);
+                assertEquals("DELIVERED", result.getStatus());
+                verify(orderRepository, never()).save(any());
+        }
+
+        @Test
         void updateOrderStatus_UnknownStatus_ThrowsIllegalArgumentException() {
                 assertThrows(IllegalArgumentException.class,
                                 () -> supplierOrderService.updateOrderStatus(1L, "UNKNOWN"));

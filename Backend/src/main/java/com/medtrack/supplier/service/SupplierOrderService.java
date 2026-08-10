@@ -123,6 +123,9 @@ public class SupplierOrderService {
         }
 
         if (currentStatus == requestedStatus) {
+            if (requestedStatus == ShipmentStatus.DELIVERED) {
+                return order; // Harmless duplicate DELIVERED event
+            }
             throw new InvalidStatusTransitionException("State transition from " + currentStatus + " to "
                     + requestedStatus + " is same-state and not allowed.");
         }
@@ -162,6 +165,8 @@ public class SupplierOrderService {
                 shipment.setEstimatedDeliveryDate(LocalDateTime.now().plusDays(3));
             }
 
+            shipment.addTimelineEvent(shipment.getShipmentStatus(), ShipmentStatus.SHIPPED,
+                    "Order dispatched (SupplierUpdate)");
             shipment.setShipmentStatus(ShipmentStatus.SHIPPED);
             shipment.setUpdatedAt(LocalDateTime.now());
             shipmentTrackingRepository.save(shipment);
@@ -186,6 +191,8 @@ public class SupplierOrderService {
                                 .build();
                     });
 
+            shipment.addTimelineEvent(shipment.getShipmentStatus(), ShipmentStatus.DELIVERED,
+                    "Order delivered (SupplierUpdate)");
             shipment.setShipmentStatus(ShipmentStatus.DELIVERED);
             shipment.setActualDeliveryDate(LocalDateTime.now());
             shipment.setUpdatedAt(LocalDateTime.now());

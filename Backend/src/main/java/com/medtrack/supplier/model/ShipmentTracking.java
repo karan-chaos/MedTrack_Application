@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "shipment_trackings", uniqueConstraints = {
@@ -52,8 +54,23 @@ public class ShipmentTracking {
     @Column(nullable = false)
     private boolean delayDetected = false;
 
+    @Builder.Default
+    @OneToMany(mappedBy = "shipmentTracking", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ShipmentTimelineEntry> timeline = new ArrayList<>();
+
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public void addTimelineEvent(ShipmentStatus prev, ShipmentStatus next, String trackingInfo) {
+        ShipmentTimelineEntry entry = ShipmentTimelineEntry.builder()
+                .shipmentTracking(this)
+                .eventTimestamp(LocalDateTime.now())
+                .previousStatus(prev)
+                .newStatus(next)
+                .trackingInformation(trackingInfo)
+                .build();
+        this.timeline.add(entry);
     }
 }
