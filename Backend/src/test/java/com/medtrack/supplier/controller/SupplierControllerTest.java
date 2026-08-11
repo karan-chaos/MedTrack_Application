@@ -177,4 +177,72 @@ public class SupplierControllerTest {
                                 .andExpect(jsonPath("$.onTimeDeliveryRate").value(75.0))
                                 .andExpect(jsonPath("$.performanceScore").value(80.0));
         }
+
+        // -----------------------------------------------------------------------
+        // Phase 23 – Pagination & Status Filter Refinements
+        // -----------------------------------------------------------------------
+
+        @Test
+        void getSupplierOrders_ExcessivePageSize_Returns400() throws Exception {
+                when(supplierOrderService.getSupplierOrders(
+                                eq(0), eq(101), eq("orderDate"), eq("desc"),
+                                eq(null), eq(null), eq(null), eq(null)))
+                                .thenThrow(new IllegalArgumentException("Page size must not exceed 100"));
+
+                mockMvc.perform(get("/api/supplier/orders")
+                                .param("size", "101"))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.message").value("Page size must not exceed 100"));
+        }
+
+        @Test
+        void getSupplierOrders_ZeroSize_Returns400() throws Exception {
+                when(supplierOrderService.getSupplierOrders(
+                                eq(0), eq(0), eq("orderDate"), eq("desc"),
+                                eq(null), eq(null), eq(null), eq(null)))
+                                .thenThrow(new IllegalArgumentException(
+                                                "Page size must not be less than or equal to zero"));
+
+                mockMvc.perform(get("/api/supplier/orders")
+                                .param("size", "0"))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.message")
+                                                .value("Page size must not be less than or equal to zero"));
+        }
+
+        @Test
+        void getSupplierOrders_InvalidStatus_Returns400() throws Exception {
+                when(supplierOrderService.getSupplierOrders(
+                                eq(0), eq(10), eq("orderDate"), eq("desc"),
+                                eq("DISPATCHED"), eq(null), eq(null), eq(null)))
+                                .thenThrow(new IllegalArgumentException("Invalid order status: DISPATCHED"));
+
+                mockMvc.perform(get("/api/supplier/orders")
+                                .param("status", "DISPATCHED"))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.message").value("Invalid order status: DISPATCHED"));
+        }
+
+        @Test
+        void getSupplierOrders_PaginationAndStatusFilter_WorkTogether() throws Exception {
+                // Verifies that a valid non-default page size combined with a valid status
+                // both succeed and the controller returns 200 OK (Phase 23 Step 6 #7)
+                EquipmentOrder order = EquipmentOrder.builder()
+                                .id(3L).status("SHIPPED").build();
+                Page<EquipmentOrder> page = new PageImpl<>(
+                                Collections.singletonList(order), PageRequest.of(0, 5), 1);
+
+                when(supplierOrderService.getSupplierOrders(
+                                eq(0), eq(5), eq("orderDate"), eq("desc"),
+                                eq("SHIPPED"), eq(null), eq(null), eq(null)))
+                                .thenReturn(page);
+
+                mockMvc.perform(get("/api/supplier/orders")
+                                .param("size", "5")
+                                .param("status", "SHIPPED")
+                                .accept(MediaType.APPLICATION_JSON))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.content[0].id").value(3))
+                                .andExpect(jsonPath("$.content[0].status").value("SHIPPED"));
+        }
 }

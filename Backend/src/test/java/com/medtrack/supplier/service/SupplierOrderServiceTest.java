@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -53,6 +54,7 @@ public class SupplierOrderServiceTest {
                                 userRepository);
                 ReflectionTestUtils.setField(supplierOrderService, "kafkaTemplate", kafkaTemplate);
                 ReflectionTestUtils.setField(supplierOrderService, "orderEventsTopic", "order-events");
+                ReflectionTestUtils.setField(supplierOrderService, "maxPageSize", 100);
         }
 
         @Test
@@ -276,5 +278,109 @@ public class SupplierOrderServiceTest {
 
                 // We expect it to try exactly 3 times (the retry loop)
                 verify(kafkaTemplate, times(3)).send(anyString(), anyString(), any());
+        }
+
+        // -----------------------------------------------------------------------
+        // Phase 23 – Pagination & Status Filter Refinements
+        // -----------------------------------------------------------------------
+
+        @Test
+        void getSupplierOrders_ExcessivePageSize_ThrowsIllegalArgumentException() {
+                assertThrows(IllegalArgumentException.class, () -> supplierOrderService.getSupplierOrders(
+                                0, 101, "orderDate", "desc", null, null, null, null));
+        }
+
+        @Test
+        void getSupplierOrders_MaxAllowedPageSize_DoesNotThrow() {
+                Page<EquipmentOrder> page = new PageImpl<>(Collections.emptyList());
+                when(orderRepository.findSupplierOrders(any(), any(), any(), any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(page);
+
+                assertDoesNotThrow(() -> supplierOrderService.getSupplierOrders(
+                                0, 100, "orderDate", "desc", null, null, null, null));
+        }
+
+        @Test
+        void getSupplierOrders_ValidStatusConfirmed_ReturnsPage() {
+                EquipmentOrder order = EquipmentOrder.builder().id(2L).status("CONFIRMED").build();
+                Page<EquipmentOrder> page = new PageImpl<>(Collections.singletonList(order));
+
+                when(orderRepository.findSupplierOrders(
+                                eq("CONFIRMED"), any(), any(), any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(page);
+
+                Page<EquipmentOrder> result = supplierOrderService.getSupplierOrders(
+                                0, 10, "orderDate", "desc", "CONFIRMED", null, null, null);
+
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+        }
+
+        @Test
+        void getSupplierOrders_InvalidStatusDispatched_ThrowsIllegalArgumentException() {
+                // DISPATCHED was previously in the stale VALID_STATUSES list; it must now be
+                // rejected
+                assertThrows(IllegalArgumentException.class, () -> supplierOrderService.getSupplierOrders(
+                                0, 10, "orderDate", "desc", "DISPATCHED", null, null, null));
+        }
+
+        @Test
+        void getSupplierOrders_InvalidStatusInTransit_ThrowsIllegalArgumentException() {
+                // IN_TRANSIT was previously in the stale VALID_STATUSES list; it must now be
+                // rejected
+                assertThrows(IllegalArgumentException.class, () -> supplierOrderService.getSupplierOrders(
+                                0, 10, "orderDate", "desc", "IN_TRANSIT", null, null, null));
+        }
+
+        @Test
+        void getSupplierOrders_EmptyResult_ReturnsEmptyPage() {
+                Page<EquipmentOrder> emptyPage = new PageImpl<>(Collections.emptyList());
+                when(orderRepository.findSupplierOrders(any(), any(), any(), any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(emptyPage);
+
+                Page<EquipmentOrder> result = supplierOrderService.getSupplierOrders(
+                                0, 10, "orderDate", "desc", null, null, null, null);
+
+                assertNotNull(result);
+                assertTrue(result.isEmpty());
+        }
+
+        @Test
+        void getSupplierOrders_NullStatus_Accepted() {
+                Page<EquipmentOrder> page = new PageImpl<>(Collections.emptyList());
+                when(orderRepository.findSupplierOrders(any(), any(), any(), any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(page);
+
+                assertDoesNotThrow(() -> supplierOrderService.getSupplierOrders(
+                                0, 10, "orderDate", "desc", null, null, null, null));
+        }
+
+        @Test
+        void getSupplierOrders_PaginationAndStatusFilter_WorkTogether() {
+                // Verifies that a valid non-default page size combined with a valid status
+                // filter
+                // both succeed and are forwarded to the repository correctly (Phase 23 Step 6
+                // #7)
+                EquipmentOrder order = EquipmentOrder.builder().id(3L).status("SHIPPED").build();
+                Page<EquipmentOrder> page = new PageImpl<>(
+                                Collections.singletonList(order),
+                                PageRequest.of(0, 5),
+                                1);
+
+                when(orderRepository.findSupplierOrders(
+                                eq("SHIPPED"), any(), any(), any(),
+                                any(org.springframework.data.domain.Pageable.class)))
+                                .thenReturn(page);
+
+                Page<EquipmentOrder> result = supplierOrderService.getSupplierOrders(
+                                0, 5, "orderDate", "desc", "SHIPPED", null, null, null);
+
+                assertNotNull(result);
+                assertEquals(1, result.getTotalElements());
+                assertEquals(5, result.getPageable().getPageSize());
         }
 }

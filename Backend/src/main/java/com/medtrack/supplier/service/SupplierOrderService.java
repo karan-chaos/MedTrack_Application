@@ -47,8 +47,21 @@ public class SupplierOrderService {
     @Value("${app.kafka.topics.order-events:order-events}")
     private String orderEventsTopic;
 
-    private static final List<String> VALID_STATUSES = Arrays.asList(
-            "PENDING", "CONFIRMED", "DISPATCHED", "IN_TRANSIT", "DELIVERED");
+    @Value("${app.supplier.pagination.max-page-size:100}")
+    private int maxPageSize;
+
+    /**
+     * Valid order statuses accepted by the {@code status} filter parameter.
+     * <p>
+     * These values are intentionally constrained to the four lifecycle states
+     * defined by the {@link ShipmentStatus} enum: PENDING → CONFIRMED → SHIPPED →
+     * DELIVERED.
+     * Stale values such as {@code DISPATCHED} or {@code IN_TRANSIT} are explicitly
+     * excluded and will result in a 400 Bad Request.
+     * </p>
+     */
+    private static final Set<String> VALID_STATUSES = new HashSet<>(Arrays.asList(
+            "PENDING", "CONFIRMED", "SHIPPED", "DELIVERED"));
 
     private static final List<String> VALID_SHIPPING_STATUSES = Arrays.asList(
             "Processing", "Shipped", "Delivered", "Cancelled");
@@ -63,6 +76,10 @@ public class SupplierOrderService {
         }
         if (size <= 0) {
             throw new IllegalArgumentException("Page size must not be less than or equal to zero");
+        }
+        if (size > maxPageSize) {
+            throw new IllegalArgumentException(
+                    "Page size must not exceed " + maxPageSize);
         }
 
         if (status != null && !status.isEmpty() && !VALID_STATUSES.contains(status)) {
