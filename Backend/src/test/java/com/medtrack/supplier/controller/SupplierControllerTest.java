@@ -112,6 +112,7 @@ public class SupplierControllerTest {
                 mockMvc.perform(get("/api/supplier/orders")
                                 .param("page", "-1"))
                                 .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.timestamp").exists())
                                 .andExpect(jsonPath("$.message").value("Page index must not be less than zero"));
         }
 
@@ -141,6 +142,7 @@ public class SupplierControllerTest {
                                 .param("newStatus", "SHIPPED")
                                 .accept(MediaType.APPLICATION_JSON))
                                 .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.timestamp").exists())
                                 .andExpect(jsonPath("$.message").value("Invalid status transition"));
         }
 
@@ -154,6 +156,7 @@ public class SupplierControllerTest {
                                 .param("newStatus", "CONFIRMED")
                                 .accept(MediaType.APPLICATION_JSON))
                                 .andExpect(status().isNotFound())
+                                .andExpect(jsonPath("$.timestamp").exists())
                                 .andExpect(jsonPath("$.message").value("Order not found with id: 99"));
         }
 
@@ -236,6 +239,7 @@ public class SupplierControllerTest {
                 mockMvc.perform(get("/api/supplier/orders")
                                 .param("size", "101"))
                                 .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.timestamp").exists())
                                 .andExpect(jsonPath("$.message").value("Page size must not exceed 100"));
         }
 
@@ -250,6 +254,7 @@ public class SupplierControllerTest {
                 mockMvc.perform(get("/api/supplier/orders")
                                 .param("size", "0"))
                                 .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.timestamp").exists())
                                 .andExpect(jsonPath("$.message")
                                                 .value("Page size must not be less than or equal to zero"));
         }
@@ -264,6 +269,7 @@ public class SupplierControllerTest {
                 mockMvc.perform(get("/api/supplier/orders")
                                 .param("status", "DISPATCHED"))
                                 .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.timestamp").exists())
                                 .andExpect(jsonPath("$.message").value("Invalid order status: DISPATCHED"));
         }
 

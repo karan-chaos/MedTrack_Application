@@ -37,35 +37,38 @@ public class GlobalExceptionHandlerTest {
     void handleBadCredentials_Success() {
         BadCredentialsException ex = new BadCredentialsException("Invalid username or password");
 
-        ResponseEntity<Map<String, String>> response = globalExceptionHandler.handleBadCredentials(ex);
+        ResponseEntity<ApiErrorResponse> response = globalExceptionHandler.handleBadCredentials(ex);
 
         assertNotNull(response);
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Invalid username or password", response.getBody().get("message"));
+        assertEquals("Invalid username or password", response.getBody().getMessage());
+        assertNotNull(response.getBody().getTimestamp());
     }
 
     @Test
     void handleRuntimeException_Success() {
         RuntimeException ex = new RuntimeException("Something went wrong");
 
-        ResponseEntity<Map<String, String>> response = globalExceptionHandler.handleRuntimeException(ex);
+        ResponseEntity<ApiErrorResponse> response = globalExceptionHandler.handleRuntimeException(ex);
 
         assertNotNull(response);
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("Something went wrong", response.getBody().get("message"));
+        assertEquals("Something went wrong", response.getBody().getMessage());
+        assertNotNull(response.getBody().getTimestamp());
     }
 
     @Test
     void handleGeneralException_Success() {
         Exception ex = new Exception("General internal error");
 
-        ResponseEntity<Map<String, String>> response = globalExceptionHandler.handleGeneralException(ex);
+        ResponseEntity<ApiErrorResponse> response = globalExceptionHandler.handleGeneralException(ex);
 
         assertNotNull(response);
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("An unexpected error occurred", response.getBody().get("message"));
+        assertEquals("An unexpected error occurred", response.getBody().getMessage());
+        assertNotNull(response.getBody().getTimestamp());
     }
 }
