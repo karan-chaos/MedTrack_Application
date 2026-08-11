@@ -22,6 +22,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import com.medtrack.supplier.dto.OrderStatusHistoryResponse;
 import com.medtrack.supplier.dto.FulfillmentSummaryResponse;
 import com.medtrack.supplier.service.SupplierFulfillmentService;
+import io.swagger.v3.oas.annotations.Parameter;
 
 @RestController
 @RequestMapping("/api/supplier")
@@ -43,14 +44,14 @@ public class SupplierController {
                         @ApiResponse(responseCode = "400", description = "Invalid request parameters: page index must be ≥ 0, page size must be between 1 and the configured maximum (100), or order status must be one of PENDING, CONFIRMED, SHIPPED, DELIVERED")
         })
         public ResponseEntity<Page<EquipmentOrder>> getSupplierOrders(
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int size,
-                        @RequestParam(defaultValue = "orderDate") String sortBy,
-                        @RequestParam(defaultValue = "desc") String sortDir,
-                        @RequestParam(required = false) String status,
-                        @RequestParam(required = false) String shippingStatus,
-                        @RequestParam(required = false) Long supplierId,
-                        @RequestParam(required = false) String search) {
+                        @Parameter(description = "Page index to retrieve (0-based)") @RequestParam(defaultValue = "0") int page,
+                        @Parameter(description = "Number of records per page (max configured limit)") @RequestParam(defaultValue = "10") int size,
+                        @Parameter(description = "Sorting field, e.g. orderDate") @RequestParam(defaultValue = "orderDate") String sortBy,
+                        @Parameter(description = "Sorting direction: asc or desc") @RequestParam(defaultValue = "desc") String sortDir,
+                        @Parameter(description = "Filter by order status (e.g., PENDING, CONFIRMED, SHIPPED, DELIVERED)") @RequestParam(required = false) String status,
+                        @Parameter(description = "Filter by specific shipping status") @RequestParam(required = false) String shippingStatus,
+                        @Parameter(description = "Filter by supplier ID") @RequestParam(required = false) Long supplierId,
+                        @Parameter(description = "Search query string") @RequestParam(required = false) String search) {
 
                 Page<EquipmentOrder> orders = supplierOrderService.getSupplierOrders(
                                 page, size, sortBy, sortDir, status, shippingStatus, supplierId, search);
@@ -71,8 +72,12 @@ public class SupplierController {
                         @ApiResponse(responseCode = "404", description = "Supplier order not found")
         })
         public ResponseEntity<EquipmentOrder> updateOrderStatus(
-                        @PathVariable Long orderId,
-                        @RequestParam String newStatus) {
+                        @Parameter(description = "The unique identifier of the order") @PathVariable Long orderId,
+                        @Parameter(description = "The new status to apply (e.g., CONFIRMED, SHIPPED, DELIVERED)") @RequestParam String newStatus) {
+
+                if (newStatus == null || newStatus.trim().isEmpty()) {
+                        throw new IllegalArgumentException("Order status cannot be blank");
+                }
 
                 EquipmentOrder updatedOrder = supplierOrderService.updateOrderStatus(orderId, newStatus);
                 return ResponseEntity.ok(updatedOrder);

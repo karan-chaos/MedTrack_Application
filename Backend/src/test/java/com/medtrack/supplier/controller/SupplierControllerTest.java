@@ -147,6 +147,15 @@ public class SupplierControllerTest {
         }
 
         @Test
+        void updateOrderStatus_BlankStatus_Returns400() throws Exception {
+                mockMvc.perform(put("/api/supplier/order/update/1")
+                                .param("newStatus", "   ")
+                                .accept(MediaType.APPLICATION_JSON))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.message").value("Order status cannot be blank"));
+        }
+
+        @Test
         void updateOrderStatus_NotFound_Returns404() throws Exception {
                 when(supplierOrderService.updateOrderStatus(99L, "CONFIRMED"))
                                 .thenThrow(new com.medtrack.exception.ResourceNotFoundException(
