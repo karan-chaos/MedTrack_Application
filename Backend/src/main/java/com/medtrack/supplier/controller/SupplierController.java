@@ -16,6 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import com.medtrack.supplier.dto.OrderStatusHistoryResponse;
+
 @RestController
 @RequestMapping("/api/supplier")
 @RequiredArgsConstructor
@@ -68,6 +71,18 @@ public class SupplierController {
 
                 EquipmentOrder updatedOrder = supplierOrderService.updateOrderStatus(orderId, newStatus);
                 return ResponseEntity.ok(updatedOrder);
+        }
+
+        @GetMapping("/order/{orderId}/status-history")
+        @PreAuthorize("hasRole('SUPPLIER')")
+        @Operation(summary = "Get order status history", description = "Allows suppliers to retrieve the status transition history for a specific order.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Successfully retrieved status history", content = @Content(schema = @Schema(implementation = OrderStatusHistoryResponse.class))),
+                        @ApiResponse(responseCode = "404", description = "Supplier order not found")
+        })
+        public ResponseEntity<List<OrderStatusHistoryResponse>> getOrderStatusHistory(@PathVariable Long orderId) {
+                List<OrderStatusHistoryResponse> history = supplierOrderService.getOrderStatusHistory(orderId);
+                return ResponseEntity.ok(history);
         }
 
         // -----------------------------------------------------------------------

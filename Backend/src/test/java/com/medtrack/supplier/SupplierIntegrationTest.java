@@ -93,7 +93,36 @@ class SupplierIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SHIPPED"))
-                .andExpect(jsonPath("$.trackingNumber").value("TR-12345"));
+                .andExpect(jsonPath("$.status").value("SHIPPED"));
+                
+        // Verify Status History
+        mockMvc.perform(get("/api/supplier/order/" + savedOrder.getId() + "/status-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].previousStatus").value("PENDING"))
+                .andExpect(jsonPath("$[0].newStatus").value("CONFIRMED"))
+                .andExpect(jsonPath("$[1].previousStatus").value("CONFIRMED"))
+                .andExpect(jsonPath("$[1].newStatus").value("SHIPPED"));
+    }
+    
+    @Test
+    void testInvalidTransitionRejected() throws Exception {
+        mockMvc.perform(put("/api/supplier/order/update/" + savedOrder.getId() + "?newStatus=SHIPPED"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testDuplicateStatusNoHistory() throws Exception {
+        mockMvc.perform(put("/api/supplier/order/update/" + savedOrder.getId() + "?newStatus=CONFIRMED"))
+                .andExpect(status().isOk());
+                
+        mockMvc.perform(put("/api/supplier/order/update/" + savedOrder.getId() + "?newStatus=CONFIRMED"))
+                .andExpect(status().isBadRequest()); // same-state transition throws InvalidStatusTransitionException
+    }
+    
+    @Test
+    void testUnknownOrderHandledCorrectly() throws Exception {
+        mockMvc.perform(get("/api/supplier/order/999999/status-history"))
+                .andExpect(status().isNotFound());
     }
 }

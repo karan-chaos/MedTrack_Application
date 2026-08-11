@@ -161,6 +161,23 @@ public class SupplierOrderService {
                     "Invalid status transition from " + currentStatus + " to " + requestedStatus);
         }
 
+        ShipmentTracking shipment = shipmentTrackingRepository.findByOrderId(orderId)
+                .orElseGet(() -> {
+                    Long supplierId = resolveSupplierId();
+                    ShipmentTracking newShipment = ShipmentTracking.builder()
+                            .orderId(orderId)
+                            .supplierId(supplierId)
+                            .createdAt(LocalDateTime.now())
+                            .shipmentStatus(ShipmentStatus.PENDING)
+                            .build();
+                    newShipment.setShipmentTrackingNumber(generateUniqueTrackingNumber());
+                    return newShipment;
+                });
+
+        shipment.addTimelineEvent(currentStatus, requestedStatus, "Order status updated to " + requestedStatus);
+        shipment.setShipmentStatus(requestedStatus);
+        shipment.setUpdatedAt(LocalDateTime.now());
+        
         // Process Shipment state additions
         if (requestedStatus == ShipmentStatus.SHIPPED) {
             ShipmentTracking shipment = shipmentTrackingRepository.findByOrderId(orderId)
@@ -173,20 +190,9 @@ public class SupplierOrderService {
                                 .shipmentStatus(ShipmentStatus.PENDING)
                                 .build();
                     });
-
-            if (shipment.getShipmentTrackingNumber() == null || shipment.getShipmentTrackingNumber().isEmpty()) {
-                shipment.setShipmentTrackingNumber(generateUniqueTrackingNumber());
-            }
-
             if (shipment.getEstimatedDeliveryDate() == null) {
                 shipment.setEstimatedDeliveryDate(LocalDateTime.now().plusDays(3));
             }
-
-            shipment.addTimelineEvent(shipment.getShipmentStatus(), ShipmentStatus.SHIPPED,
-                    "Order dispatched (SupplierUpdate)");
-            shipment.setShipmentStatus(ShipmentStatus.SHIPPED);
-            shipment.setUpdatedAt(LocalDateTime.now());
-            shipmentTrackingRepository.save(shipment);
 
             order.setTrackingNo(shipment.getShipmentTrackingNumber());
             order.setCarrier(order.getCarrier() != null ? order.getCarrier() : "Standard Carrier");
@@ -197,23 +203,7 @@ public class SupplierOrderService {
             scheduleEventPublish(orderId, requestedStatus, shipment, publishedEvents);
 
         } else if (requestedStatus == ShipmentStatus.DELIVERED) {
-            ShipmentTracking shipment = shipmentTrackingRepository.findByOrderId(orderId)
-                    .orElseGet(() -> {
-                        Long supplierId = resolveSupplierId();
-                        return ShipmentTracking.builder()
-                                .orderId(orderId)
-                                .supplierId(supplierId)
-                                .createdAt(LocalDateTime.now())
-                                .shipmentStatus(ShipmentStatus.SHIPPED)
-                                .build();
-                    });
-
-            shipment.addTimelineEvent(shipment.getShipmentStatus(), ShipmentStatus.DELIVERED,
-                    "Order delivered (SupplierUpdate)");
-            shipment.setShipmentStatus(ShipmentStatus.DELIVERED);
             shipment.setActualDeliveryDate(LocalDateTime.now());
-            shipment.setUpdatedAt(LocalDateTime.now());
-            shipmentTrackingRepository.save(shipment);
 
             order.setShippingStatus("Delivered");
             order.setDeliveredAt(LocalDateTime.now());
@@ -223,8 +213,27 @@ public class SupplierOrderService {
 
         order.setStatus(requestedStatus.name());
         order.setUpdatedAt(LocalDateTime.now());
+        
+        shipmentTrackingRepository.save(shipment);
 
         return orderRepository.save(order);
+    }
+    
+    @Transactional(readOnly = true)
+    public List<com.medtrack.supplier.dto.OrderStatusHistoryResponse> getOrderStatusHistory(Long orderId) {
+        if (!orderRepository.existsById(orderId)) {
+            throw new ResourceNotFoundException("Order not found with id: " + orderId);
+        }
+        
+        return shipmentTrackingRepository.findByOrderId(orderId)
+                .map(shipment -> shipment.getTimeline().stream()
+                        .map(entry -> new com.medtrack.supplier.dto.OrderStatusHistoryResponse(
+                                orderId,
+                                entry.getPreviousStatus() != null ? entry.getPreviousStatus().name() : null,
+                                entry.getNewStatus() != null ? entry.getNewStatus().name() : null,
+                                entry.getEventTimestamp()))
+                        .toList())
+                .orElse(List.of());
     }
 
     private Long resolveSupplierId() {
