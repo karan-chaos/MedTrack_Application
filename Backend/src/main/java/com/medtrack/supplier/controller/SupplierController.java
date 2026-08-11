@@ -17,7 +17,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.time.LocalDateTime;
+import org.springframework.format.annotation.DateTimeFormat;
 import com.medtrack.supplier.dto.OrderStatusHistoryResponse;
+import com.medtrack.supplier.dto.FulfillmentSummaryResponse;
+import com.medtrack.supplier.service.SupplierFulfillmentService;
 
 @RestController
 @RequestMapping("/api/supplier")
@@ -28,6 +32,7 @@ public class SupplierController {
 
         private final SupplierOrderService supplierOrderService;
         private final SupplierPerformanceService supplierPerformanceService;
+        private final SupplierFulfillmentService supplierFulfillmentService;
 
         @GetMapping("/orders")
         @PreAuthorize("hasRole('SUPPLIER')")
@@ -100,5 +105,30 @@ public class SupplierController {
                         @PathVariable Long supplierId) {
                 SupplierPerformanceResponse response = supplierPerformanceService.getPerformance(supplierId);
                 return ResponseEntity.ok(response);
+        }
+
+        @GetMapping("/fulfillment/summary")
+        @PreAuthorize("hasRole('SUPPLIER')")
+        @Operation(summary = "Get fulfillment summary", description = "Returns a summary of fulfillment operations with optional date range filters.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Successfully retrieved summary", content = @Content(schema = @Schema(implementation = FulfillmentSummaryResponse.class))),
+                        @ApiResponse(responseCode = "400", description = "Invalid date range or format")
+        })
+        public ResponseEntity<FulfillmentSummaryResponse> getFulfillmentSummary(
+                        @RequestParam(required = false) Long supplierId,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+
+                if (from != null && to != null && from.isAfter(to)) {
+                        throw new IllegalArgumentException("'from' date cannot be after 'to' date");
+                }
+
+                if (supplierId == null) {
+                        supplierId = 1L;
+                }
+
+                FulfillmentSummaryResponse summary = supplierFulfillmentService.getFulfillmentSummary(supplierId, from,
+                                to);
+                return ResponseEntity.ok(summary);
         }
 }

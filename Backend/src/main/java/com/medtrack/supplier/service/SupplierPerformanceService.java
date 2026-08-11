@@ -59,16 +59,15 @@ public class SupplierPerformanceService {
                 long totalShipments = shipmentTrackingRepository.countBySupplierId(supplierId);
                 long delayedShipments = shipmentTrackingRepository.countBySupplierIdAndDelayDetectedTrue(supplierId);
 
+                // Fetch delivered shipments
                 List<ShipmentTracking> delivered = shipmentTrackingRepository
                                 .findBySupplierIdAndShipmentStatus(supplierId, ShipmentStatus.DELIVERED);
                 long deliveredShipments = delivered.size();
 
-                // On-time deliveries: delivered and not flagged as delayed.
-                // Phase 22: additionally guard via actual vs estimated date comparison so
-                // scoring
-                // is accurate even when the delay scheduler has not yet processed the shipment.
+                // On-time deliveries: delivered and not late.
+                // A shipment is on time if actualDeliveryDate <= estimatedDeliveryDate,
+                // or if estimatedDeliveryDate is null (we assume on time).
                 long onTimeShipments = delivered.stream()
-                                .filter(s -> !s.isDelayDetected())
                                 .filter(s -> s.getActualDeliveryDate() == null
                                                 || s.getEstimatedDeliveryDate() == null
                                                 || !s.getActualDeliveryDate().isAfter(s.getEstimatedDeliveryDate()))
@@ -78,12 +77,24 @@ public class SupplierPerformanceService {
                                 ? (double) onTimeShipments / deliveredShipments * 100.0
                                 : 0.0;
 
+                onTimeDeliveryRate = Math.max(0.0, Math.min(100.0, onTimeDeliveryRate));
+
                 double delayRatio = totalShipments > 0
                                 ? (double) delayedShipments / totalShipments
                                 : 0.0;
 
-                double performanceScore = (onTimeDeliveryRate * onTimeWeight)
-                                + ((1.0 - delayRatio) * delayPenaltyWeight);
+                double performanceScore = 0.0;
+
+                if (totalShipments > 0) {
+                        performanceScore = (onTimeDeliveryRate * onTimeWeight)
+                                        + ((1.0 - Math.min(1.0, delayRatio)) * delayPenaltyWeight);
+                }
+
+                performanceScore = Math.max(0.0, Math.min(100.0, performanceScore));
+
+                // Consistent rounding to 2 decimal places
+                onTimeDeliveryRate = Math.round(onTimeDeliveryRate * 100.0) / 100.0;
+                performanceScore = Math.round(performanceScore * 100.0) / 100.0;
 
                 log.debug(
                                 "Performance score for supplier {}: total={}, delivered={}, delayed={}, onTime={}, rate={:.2f}, score={:.2f}",

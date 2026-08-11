@@ -22,6 +22,11 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Phase 22 – strengthened shipment tracking service.
@@ -48,9 +53,16 @@ import java.util.stream.Collectors;
 public class ShipmentTrackingService {
 
     private static final String TRACKING_NUMBER_PATTERN = "^[A-Za-z0-9\\-]{3,100}$";
+    private static final Logger log = LoggerFactory.getLogger(ShipmentTrackingService.class);
 
     private final ShipmentTrackingRepository shipmentTrackingRepository;
     private final EquipmentOrderRepository orderRepository;
+
+    @Autowired(required = false)
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Value("${app.kafka.topics.order-events:order-events}")
+    private String orderEventsTopic;
 
     // -------------------------------------------------------------------------
     // Create
@@ -160,6 +172,7 @@ public class ShipmentTrackingService {
                 shipment.setUpdatedAt(LocalDateTime.now());
                 ShipmentTracking saved = shipmentTrackingRepository.save(shipment);
                 syncOrder(saved, newStatus, request.getSupplierNotes());
+                publishKafkaEvent(saved.getOrderId(), newStatus, saved);
                 return mapToResponse(saved);
             }
         }
@@ -180,6 +193,7 @@ public class ShipmentTrackingService {
 
         // 8. Update associated order
         syncOrder(updatedShipment, newStatus, request.getSupplierNotes());
+        publishKafkaEvent(updatedShipment.getOrderId(), newStatus, updatedShipment);
 
         return mapToResponse(updatedShipment);
     }
@@ -339,5 +353,41 @@ public class ShipmentTrackingService {
                 .delayDetected(shipment.isDelayDetected() && shipment.getShipmentStatus() != ShipmentStatus.DELIVERED)
                 .timeline(buildTimelineResponses(shipment))
                 .build();
+    }
+
+    private void publishKafkaEvent(Long orderId, ShipmentStatus status, ShipmentTracking shipment) {
+        if (kafkaTemplate == null) {
+            log.warn("KafkaTemplate is not available. Skipping event publication for order ID: [{}]", orderId);
+            return;
+        }
+        try {
+            if (status == ShipmentStatus.SHIPPED) {
+                com.medtrack.supplier.event.OrderShippedEvent event = com.medtrack.supplier.event.OrderShippedEvent
+                        .builder()
+                        .orderId(orderId)
+                        .shipmentTrackingNumber(shipment.getShipmentTrackingNumber())
+                        .estimatedDeliveryDate(shipment.getEstimatedDeliveryDate())
+                        .shippedAt(LocalDateTime.now())
+                        .supplierId(shipment.getSupplierId())
+                        .build();
+                log.info("Publishing OrderShippedEvent for order ID: [{}] from ShipmentTrackingService", orderId);
+                kafkaTemplate.send(orderEventsTopic, String.valueOf(orderId), event);
+            } else if (status == ShipmentStatus.DELIVERED) {
+                com.medtrack.supplier.event.OrderDeliveredEvent event = com.medtrack.supplier.event.OrderDeliveredEvent
+                        .builder()
+                        .orderId(orderId)
+                        .shipmentTrackingNumber(shipment.getShipmentTrackingNumber())
+                        .actualDeliveryDate(
+                                shipment.getActualDeliveryDate() != null ? shipment.getActualDeliveryDate()
+                                        : LocalDateTime.now())
+                        .supplierId(shipment.getSupplierId())
+                        .build();
+                log.info("Publishing OrderDeliveredEvent for order ID: [{}] from ShipmentTrackingService", orderId);
+                kafkaTemplate.send(orderEventsTopic, String.valueOf(orderId), event);
+            }
+        } catch (Exception e) {
+            log.error("Failed to publish Kafka event for order ID: [{}], status: [{}] due to error: {}", orderId,
+                    status, e.getMessage());
+        }
     }
 }

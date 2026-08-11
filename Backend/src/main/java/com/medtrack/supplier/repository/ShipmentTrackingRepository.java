@@ -3,6 +3,8 @@ package com.medtrack.supplier.repository;
 import com.medtrack.supplier.model.ShipmentStatus;
 import com.medtrack.supplier.model.ShipmentTracking;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -37,4 +39,38 @@ public interface ShipmentTrackingRepository extends JpaRepository<ShipmentTracki
     // delayed
     // (used to catch late-but-delivered shipments)
     List<ShipmentTracking> findByShipmentStatusAndDelayDetectedFalse(ShipmentStatus status);
+
+    // Phase 26: Aggregation queries for Fulfillment Summary
+    @Query(value = "SELECT COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND s.shipmentStatus <> :deliveredStatus AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate)")
+    long countActiveShipments(@Param("supplierId") Long supplierId,
+            @Param("deliveredStatus") ShipmentStatus deliveredStatus, @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate);
+
+    @Query(value = "SELECT COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND s.shipmentStatus <> :deliveredStatus AND s.delayDetected = true AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate)")
+    long countDelayedActiveShipments(@Param("supplierId") Long supplierId,
+            @Param("deliveredStatus") ShipmentStatus deliveredStatus, @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate);
+
+    @Query(value = "SELECT COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND s.shipmentStatus = :deliveredStatus AND (s.actualDeliveryDate <= s.estimatedDeliveryDate OR s.estimatedDeliveryDate IS NULL) AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate)")
+    long countOnTimeDeliveries(@Param("supplierId") Long supplierId,
+            @Param("deliveredStatus") ShipmentStatus deliveredStatus, @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate);
+
+    @Query(value = "SELECT COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND s.shipmentStatus = :deliveredStatus AND s.actualDeliveryDate > s.estimatedDeliveryDate AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate)")
+    long countLateDeliveries(@Param("supplierId") Long supplierId,
+            @Param("deliveredStatus") ShipmentStatus deliveredStatus, @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate);
+
+    @Query(value = "SELECT COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND s.shipmentStatus = :deliveredStatus AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate)")
+    long countDeliveredShipments(@Param("supplierId") Long supplierId,
+            @Param("deliveredStatus") ShipmentStatus deliveredStatus, @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate);
+
+    @Query(value = "SELECT COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate)")
+    long countTotalShipments(@Param("supplierId") Long supplierId, @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate);
+
+    @Query(value = "SELECT s.shipmentStatus, COUNT(s) FROM ShipmentTracking s WHERE s.supplierId = :supplierId AND (:fromDate IS NULL OR s.createdAt >= :fromDate) AND (:toDate IS NULL OR s.createdAt <= :toDate) GROUP BY s.shipmentStatus")
+    List<Object[]> countShipmentsByStatus(@Param("supplierId") Long supplierId,
+            @Param("fromDate") LocalDateTime fromDate, @Param("toDate") LocalDateTime toDate);
 }

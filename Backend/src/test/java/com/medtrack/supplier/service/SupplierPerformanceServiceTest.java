@@ -126,8 +126,8 @@ public class SupplierPerformanceServiceTest {
                 assertEquals(0L, response.getTotalShipments());
                 assertEquals(0L, response.getDeliveredShipments());
                 assertEquals(0.0, response.getOnTimeDeliveryRate(), 0.001);
-                // score = (0 * 0.8) + ((1 - 0) * 20) = 20
-                assertEquals(20.0, response.getPerformanceScore(), 0.001);
+                // score should be perfectly 0 bounds
+                assertEquals(0.0, response.getPerformanceScore(), 0.001);
         }
 
         // ===== Phase 22: actual vs estimated delivery date guard =====

@@ -5,6 +5,9 @@ import com.medtrack.model.EquipmentOrder;
 import com.medtrack.supplier.dto.SupplierPerformanceResponse;
 import com.medtrack.supplier.service.SupplierOrderService;
 import com.medtrack.supplier.service.SupplierPerformanceService;
+import com.medtrack.supplier.service.SupplierFulfillmentService;
+import com.medtrack.supplier.dto.FulfillmentSummaryResponse;
+import com.medtrack.supplier.dto.FulfillmentStatusDistribution;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,10 +20,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -38,11 +43,15 @@ public class SupplierControllerTest {
         @Mock
         private SupplierPerformanceService supplierPerformanceService;
 
+        @Mock
+        private SupplierFulfillmentService supplierFulfillmentService;
+
         private SupplierController supplierController;
 
         @BeforeEach
         void setUp() {
-                supplierController = new SupplierController(supplierOrderService, supplierPerformanceService);
+                supplierController = new SupplierController(supplierOrderService, supplierPerformanceService,
+                                supplierFulfillmentService);
                 mockMvc = MockMvcBuilders.standaloneSetup(supplierController)
                                 .setControllerAdvice(new GlobalExceptionHandler())
                                 .build();
@@ -176,6 +185,41 @@ public class SupplierControllerTest {
                                 .andExpect(jsonPath("$.onTimeShipments").value(3))
                                 .andExpect(jsonPath("$.onTimeDeliveryRate").value(75.0))
                                 .andExpect(jsonPath("$.performanceScore").value(80.0));
+        }
+
+        // -----------------------------------------------------------------------
+        // Phase 26 – Fulfillment Summary
+        // -----------------------------------------------------------------------
+
+        @Test
+        void getFulfillmentSummary_Success() throws Exception {
+                Long supplierId = 10L;
+                FulfillmentStatusDistribution distribution = FulfillmentStatusDistribution.builder()
+                                .pending(10L).confirmed(5L).shipped(2L).delivered(8L).build();
+
+                FulfillmentSummaryResponse summaryResponse = FulfillmentSummaryResponse.builder()
+                                .totalOrders(25L)
+                                .activeShipments(7L)
+                                .delayedShipments(1L)
+                                .onTimeDeliveries(7L)
+                                .lateDeliveries(1L)
+                                .onTimeDeliveryRate(87.5)
+                                .deliveryStatusDistribution(distribution)
+                                .build();
+
+                when(supplierFulfillmentService.getFulfillmentSummary(eq(10L), isNull(), isNull()))
+                                .thenReturn(summaryResponse);
+
+                mockMvc.perform(get("/api/supplier/fulfillment/summary")
+                                .param("supplierId", "10")
+                                .accept(MediaType.APPLICATION_JSON))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.totalOrders").value(25))
+                                .andExpect(jsonPath("$.activeShipments").value(7))
+                                .andExpect(jsonPath("$.delayedShipments").value(1))
+                                .andExpect(jsonPath("$.onTimeDeliveryRate").value(87.5))
+                                .andExpect(jsonPath("$.deliveryStatusDistribution.pending").value(10))
+                                .andExpect(jsonPath("$.deliveryStatusDistribution.delivered").value(8));
         }
 
         // -----------------------------------------------------------------------
