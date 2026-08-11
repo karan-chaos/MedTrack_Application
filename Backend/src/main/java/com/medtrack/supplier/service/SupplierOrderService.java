@@ -177,10 +177,10 @@ public class SupplierOrderService {
         shipment.addTimelineEvent(currentStatus, requestedStatus, "Order status updated to " + requestedStatus);
         shipment.setShipmentStatus(requestedStatus);
         shipment.setUpdatedAt(LocalDateTime.now());
-        
+
         // Process Shipment state additions
         if (requestedStatus == ShipmentStatus.SHIPPED) {
-            ShipmentTracking shipment = shipmentTrackingRepository.findByOrderId(orderId)
+            ShipmentTracking updateShipment = shipmentTrackingRepository.findByOrderId(orderId)
                     .orElseGet(() -> {
                         Long supplierId = resolveSupplierId();
                         return ShipmentTracking.builder()
@@ -190,11 +190,11 @@ public class SupplierOrderService {
                                 .shipmentStatus(ShipmentStatus.PENDING)
                                 .build();
                     });
-            if (shipment.getEstimatedDeliveryDate() == null) {
-                shipment.setEstimatedDeliveryDate(LocalDateTime.now().plusDays(3));
+            if (updateShipment.getEstimatedDeliveryDate() == null) {
+                updateShipment.setEstimatedDeliveryDate(LocalDateTime.now().plusDays(3));
             }
 
-            order.setTrackingNo(shipment.getShipmentTrackingNumber());
+            order.setTrackingNo(updateShipment.getShipmentTrackingNumber());
             order.setCarrier(order.getCarrier() != null ? order.getCarrier() : "Standard Carrier");
             order.setShippingStatus("Shipped");
             order.setDispatchedAt(LocalDateTime.now());
@@ -213,18 +213,18 @@ public class SupplierOrderService {
 
         order.setStatus(requestedStatus.name());
         order.setUpdatedAt(LocalDateTime.now());
-        
+
         shipmentTrackingRepository.save(shipment);
 
         return orderRepository.save(order);
     }
-    
+
     @Transactional(readOnly = true)
     public List<com.medtrack.supplier.dto.OrderStatusHistoryResponse> getOrderStatusHistory(Long orderId) {
         if (!orderRepository.existsById(orderId)) {
             throw new ResourceNotFoundException("Order not found with id: " + orderId);
         }
-        
+
         return shipmentTrackingRepository.findByOrderId(orderId)
                 .map(shipment -> shipment.getTimeline().stream()
                         .map(entry -> new com.medtrack.supplier.dto.OrderStatusHistoryResponse(

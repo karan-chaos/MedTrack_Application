@@ -166,6 +166,9 @@ public class ShipmentTrackingService {
 
         // 7. Update shipment record
         shipment.setShipmentStatus(newStatus);
+        if (newStatus != currentStatus && newStatus != ShipmentStatus.DELIVERED) {
+            shipment.setDelayDetected(false);
+        }
         if (newStatus == ShipmentStatus.DELIVERED) {
             shipment.setActualDeliveryDate(LocalDateTime.now());
         }
@@ -246,7 +249,7 @@ public class ShipmentTrackingService {
                 .carrier(order.getCarrier())
                 .estimatedDeliveryDate(shipment.getEstimatedDeliveryDate())
                 .actualDeliveryDate(shipment.getActualDeliveryDate())
-                .delayDetected(shipment.isDelayDetected())
+                .delayDetected(shipment.isDelayDetected() && shipment.getShipmentStatus() != ShipmentStatus.DELIVERED)
                 .timeline(timelineResponses)
                 .build();
     }
@@ -333,7 +336,7 @@ public class ShipmentTrackingService {
                 .supplierId(shipment.getSupplierId())
                 .createdAt(shipment.getCreatedAt())
                 .updatedAt(shipment.getUpdatedAt())
-                .delayDetected(shipment.isDelayDetected())
+                .delayDetected(shipment.isDelayDetected() && shipment.getShipmentStatus() != ShipmentStatus.DELIVERED)
                 .timeline(buildTimelineResponses(shipment))
                 .build();
     }
